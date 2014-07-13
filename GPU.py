@@ -1,10 +1,11 @@
 __author__ = 'vincent'
-import numpy,math,util
+import numpy, math, util
 import pyopencl as cl
 import Quasi_Monte_Carlo as quasi
 
+
 class CL:
-    def __init__(self):
+    def __init__(self, kernelargs):
         platform = cl.get_platforms()
         my_gpu_devices = platform[0].get_devices(device_type=cl.device_type.GPU)
         self.cntxt = cl.Context(devices=my_gpu_devices)
@@ -13,6 +14,7 @@ class CL:
         self.queue = cl.CommandQueue(self.cntxt)
         self.mf = cl.mem_flags
 
+        self.kernelargs = kernelargs
 
 
     def loadProgram(self, filename):
@@ -23,9 +25,8 @@ class CL:
         #create the program
         self.program = cl.Program(self.cntxt, fstr).build()
 
-    def popCorn(self,Quasi):
+    def popCorn(self, Quasi):
         pass
-
 
     def execute(self):
         pass
@@ -36,13 +37,13 @@ class CL:
 
 class Option(CL):
     def __init__(self, path_num, kernelargs):
-        CL.__init__(self)
+        CL.__init__(self, kernelargs)
         self.path_num = path_num
-        self.kernelargs = kernelargs
+
 
 
 class BasketOption(Option):
-    def popCorn(self,Quasi):
+    def popCorn(self, Quasi):
         #initialize client side (CPU) arrays
 
         if Quasi == True:
@@ -62,8 +63,9 @@ class BasketOption(Option):
     def execute(self):
 
         # Kernel is now launched
-        launch = self.program.standard_arithmetic_basket_option(self.queue, self.rand1.shape, None, self.rand1_buf, self.rand2_buf,
-                                                       self.arith_basket_payoff_buf, *(self.kernelargs))
+        launch = self.program.standard_arithmetic_basket_option(self.queue, self.rand1.shape, None, self.rand1_buf,
+                                                                self.rand2_buf, self.arith_basket_payoff_buf,
+                                                                *(self.kernelargs))
         # wait till the process completes
         launch.wait()
         cl.enqueue_read_buffer(self.queue, self.arith_basket_payoff_buf, self.arith_basket_payoff).wait()
@@ -72,33 +74,37 @@ class BasketOption(Option):
         p_mean = numpy.mean(self.arith_basket_payoff)
         p_std = numpy.std(self.arith_basket_payoff)
         p_confmc = (p_mean - 1.96 * p_std / math.sqrt(self.path_num), p_mean + 1.96 * p_std / math.sqrt(self.path_num))
-        return p_mean,p_std,p_confmc
-
+        return p_mean, p_std, p_confmc
 
 
 class BasketOptionWithControlVariate(BasketOption):
-    def popCorn(self,Quasi):
+    def __init__(self, path_num, geo_K, kernelargs):
+        BasketOption.__init__(self, path_num, kernelargs)
+        self.geo_K = geo_K
+
+    def popCorn(self, Quasi):
         BasketOption.popCorn(self, Quasi)
         self.geo_basket_payoff = numpy.empty(self.rand1.shape, dtype=numpy.float32)
         self.geo_basket_payoff_buf = cl.Buffer(self.cntxt, self.mf.WRITE_ONLY, self.geo_basket_payoff.nbytes)
 
     def execute(self):
         # Kernel is now launched
-        launch = self.program.geo_mean_arithmetic_basket_option(self.queue, self.rand1.shape, None, self.rand1_buf, self.rand2_buf,
-                                                       self.arith_basket_payoff_buf, self.geo_basket_payoff_buf, *(self.kernelargs))
+        launch = self.program.geo_mean_arithmetic_basket_option(self.queue, self.rand1.shape, None, self.rand1_buf,
+                                                                self.rand2_buf, self.arith_basket_payoff_buf,
+                                                                self.geo_basket_payoff_buf, *(self.kernelargs))
         # wait till the process completes
         launch.wait()
         cl.enqueue_read_buffer(self.queue, self.arith_basket_payoff_buf, self.arith_basket_payoff).wait()
         cl.enqueue_read_buffer(self.queue, self.geo_basket_payoff_buf, self.geo_basket_payoff).wait()
 
-    def ret(self, geo_K):
-         # Control Variate
+    def ret(self):
+        # Control Variate
         covxy = numpy.mean(self.geo_basket_payoff * self.arith_basket_payoff) - numpy.mean(
             self.arith_basket_payoff) * numpy.mean(self.geo_basket_payoff)
         theta = covxy / numpy.var(self.geo_basket_payoff)
 
         # Control Variate Version
-        geo = util.geometric_basket_option(S1, S2, V1, V2, R, T, geo_K, rou, option_type)
+        geo = util.geometric_basket_option(S1, S2, V1, V2, R, T, self.geo_K, rou, option_type)
         z = self.arith_basket_payoff + theta * (geo - self.geo_basket_payoff)
         # z = [x + y for x, y in zip(arith_basket_payoff, map(lambda x: theta * (geo - x), geo_basket_payoff))]
         z_mean = numpy.mean(z)
@@ -107,14 +113,12 @@ class BasketOptionWithControlVariate(BasketOption):
         return z_mean, z_std, z_confmc
 
 
-
 class AsianOption(Option):
-
-    def __init__(self, path_num, kernelargs, N):
-        Option.__init__(self,path_num,kernelargs)
+    def __init__(self, path_num, N, kernelargs):
+        Option.__init__(self, path_num, kernelargs)
         self.N = N
 
-    def popCorn(self,Quasi):
+    def popCorn(self, Quasi):
 
 
         #initialize client side (CPU) arrays
@@ -137,41 +141,46 @@ class AsianOption(Option):
         # Kernel is now launched
 
         launch = self.program.standard_arithmetic_asian_option(self.queue, (path_num, 1), None, self.rand1_buf,
-                                                      self.arith_asian_payoff_buf, *(self.kernelargs))
+                                                               self.arith_asian_payoff_buf, *(self.kernelargs))
         # wait till the process completes
         launch.wait()
         cl.enqueue_read_buffer(self.queue, self.arith_asian_payoff_buf, self.arith_asian_payoff).wait()
 
 
     def ret(self):
-         # print the output
+        # print the output
         p_mean = numpy.mean(self.arith_asian_payoff)
         p_std = numpy.std(self.arith_asian_payoff)
         p_confmc = (p_mean - 1.96 * p_std / math.sqrt(path_num), p_mean + 1.96 * p_std / math.sqrt(path_num))
         return p_mean, p_std, p_confmc
 
 
-
 class AsianOptionWithControlVariate(AsianOption):
-    def popCorn(self,Quasi):
+    def __init__(self, path_num, N, geo_K, kernelargs):
+        AsianOption.__init__(self, path_num, N, kernelargs)
+        self.geo_K = geo_K
+
+    def popCorn(self, Quasi):
         AsianOption.popCorn(self, Quasi)
         self.geo_payoff = numpy.empty((path_num, 1), dtype=numpy.float32)
         self.geo_payoff_buf = cl.Buffer(self.cntxt, self.mf.WRITE_ONLY, self.geo_payoff.nbytes)
 
     def execute(self):
         launch = self.program.geo_mean_arithmetic_asian_option(self.queue, (path_num, 1), None, self.rand1_buf,
-                                                      self.arith_asian_payoff_buf, self.geo_payoff_buf, *(self.kernelargs))
+                                                               self.arith_asian_payoff_buf, self.geo_payoff_buf,
+                                                               *(self.kernelargs))
         # wait till the process completes
         launch.wait()
         cl.enqueue_read_buffer(self.queue, self.arith_asian_payoff_buf, self.arith_asian_payoff).wait()
         cl.enqueue_read_buffer(self.queue, self.geo_payoff_buf, self.geo_payoff).wait()
 
-    def ret(self, geo_K):
-        covxy = numpy.mean(self.geo_payoff * self.arith_asian_payoff) - numpy.mean(self.arith_asian_payoff) * numpy.mean(self.geo_payoff)
+    def ret(self):
+        covxy = numpy.mean(self.geo_payoff * self.arith_asian_payoff) - numpy.mean(
+            self.arith_asian_payoff) * numpy.mean(self.geo_payoff)
         theta = covxy / numpy.var(self.geo_payoff)
 
         # Control Variate Version
-        geo = util.geometric_asian_option(geo_K, T, R, V, S0, self.N, option_type)
+        geo = util.geometric_asian_option(self.geo_K, T, R, V, S0, self.N, option_type)
         # z = [x + y for x, y in zip(arith_payoff, map(lambda x: theta * (geo - x), geo_payoff))]
         z = self.arith_asian_payoff + theta * (geo - self.geo_payoff)
         z_mean = numpy.mean(z)
@@ -180,16 +189,12 @@ class AsianOptionWithControlVariate(AsianOption):
         return z_mean, z_std, z_confmc
 
 
-
-def Test(obj, code, Quasi, geo_K):
+def Test(obj, code, Quasi):
     obj.loadProgram(code)
     obj.popCorn(Quasi)
     obj.execute()
-    if geo_K != None:
-        # print "%.4f" % obj.ret(geo_K)
-        print obj.ret(geo_K)
-    else:
-        print obj.ret()
+    print obj.ret()
+
 
 if __name__ == "__main__":
     path_num = 10000
@@ -219,13 +224,9 @@ if __name__ == "__main__":
 
     kernelargs = (S1, S2, V1, V2, R, K, T, rou, option_type)
 
-
-
     example = BasketOption(path_num, kernelargs)
     code = "cl/standard_arithmetic_basket_option.cl"
-    geo_K = None
-    Test(example, code, Quasi, geo_K)
-
+    Test(example, code, Quasi)
 
     S = S0 = S1 = S2 = 100.0
     T = 3.0
@@ -239,7 +240,6 @@ if __name__ == "__main__":
 
     option_type = 1.0
 
-
     S1 = numpy.float32(S1)
     S2 = numpy.float32(S2)
     V1 = numpy.float32(V1)
@@ -251,13 +251,11 @@ if __name__ == "__main__":
     option_type = numpy.float32(option_type)
     geo_K = numpy.float32(geo_K)
 
-
     kernelargs = (S1, S2, V1, V2, R, K, geo_K, T, rou, option_type)
 
-    example = BasketOptionWithControlVariate(path_num,kernelargs)
+    example = BasketOptionWithControlVariate(path_num, geo_K, kernelargs)
     code = "cl/geo_mean_arithmetic_basket_option.cl"
-    Test(example, code, Quasi,geo_K)
-
+    Test(example, code, Quasi)
 
     S = S0 = S1 = S2 = 100.0
     T = 3.0
@@ -287,10 +285,9 @@ if __name__ == "__main__":
 
     kernelargs = (N, K, S0, sigma_sqrt, drift, exp_RT, option_type)
 
-    example = AsianOption(path_num, kernelargs, N)
+    example = AsianOption(path_num, N, kernelargs)
     code = "cl/standard_arithmetic_asian_option.cl"
-    geo_K = None
-    Test(example, code, Quasi,geo_K)
+    Test(example, code, Quasi)
 
     S = S0 = S1 = S2 = 100.0
     T = 3.0
@@ -313,9 +310,9 @@ if __name__ == "__main__":
 
     kernelargs = (N, K, geo_K, S0, sigma_sqrt, drift, exp_RT, option_type)
 
-    example = AsianOptionWithControlVariate(path_num,kernelargs, N)
+    example = AsianOptionWithControlVariate(path_num, N, geo_K, kernelargs)
     code = "cl/geo_mean_arithmetic_asian_option.cl"
-    Test(example, code, Quasi,geo_K)
+    Test(example, code, Quasi)
 
 
 

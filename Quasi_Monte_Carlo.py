@@ -1,6 +1,5 @@
 __author__ = 'vincent'
 import math,numpy,random,time
-import GPU_QMC
 
 STANDARD = 'Standard'
 GEO_MEAN = 'Geometric mean Asian'
@@ -172,90 +171,3 @@ if __name__ == "__main__":
     print numpy.mean(quasi_normal_random(N,base))
     e = time.time()
     print e-s
-
-
-    # S = S0 = S1 = S2 = 100.0
-    # T = 3.0
-    # R = 0.05
-    # V = V1 = V2 = 0.3
-    # K = 100.0
-    # n = 50.0
-    # rou = 0.5
-    # m = 10000
-    # geo_K = K
-    # option_type = 'call'
-    # control_variate = GEO_MEAN
-    # path_num = 10000
-    #
-    #
-    # print "using Quasi MC","path number=",path_num
-    # start = time.time()
-    #
-    # random_list1 = quasi_normal_random(path_num,2.0)
-    # random_list2 = quasi_normal_random(path_num,2.0)
-    #
-    #
-    # # random_list1 = GPU_QMC.generate_GPU_QMC_random(path_num)
-    # # random_list2 = GPU_QMC.generate_GPU_QMC_random(path_num)
-    #
-    # end = time.time()
-    # print "generating random number:",end-start
-    #
-    # arith_basket_payoff = []
-    # for i in xrange(path_num):
-    #     ran1 = random_list1[i]
-    #     ran2 = rou * ran1 + math.sqrt(1 - rou * rou) * random_list2[i]
-    #     a1 = S1 * math.exp((R - 0.5 * V1 * V1) * T + V1 * math.sqrt(T) * ran1)
-    #     a2 = S2 * math.exp((R - 0.5 * V2 * V2) * T + V2 * math.sqrt(T) * ran2)
-    #     arith_basket_mean = (a1 + a2) / 2
-    #
-    #     if option_type == 'call':
-    #         arith_basket_payoff_call = math.exp(-R * T) * max(arith_basket_mean - K, 0)
-    #         arith_basket_payoff.append(arith_basket_payoff_call)
-    #     elif option_type == 'put':
-    #         arith_basket_payoff_put = math.exp(-R * T) * max(K - arith_basket_mean, 0)
-    #         arith_basket_payoff.append(arith_basket_payoff_put)
-    #
-    #
-    # # Standard Monte Carlo
-    # p_mean = numpy.mean(arith_basket_payoff)
-    # p_std = numpy.std(arith_basket_payoff)
-    # p_confmc = (p_mean - 1.96 * p_std / math.sqrt(path_num), p_mean + 1.96 * p_std / math.sqrt(path_num))
-    #
-    #
-    # end = time.time()
-    # print "time", end - start
-    # print p_mean, p_std, p_confmc
-    #
-    # print "--------------------------------"
-    # print "using standard MC","path number=",path_num
-    #
-    # start = time.time()
-    #
-    #
-    # arith_basket_payoff = []
-    # for i in xrange(path_num):
-    #     ran1 = numpy.random.normal(0, 1)
-    #     ran2 = rou * ran1 + math.sqrt(1 - rou * rou) * numpy.random.normal(0, 1)
-    #     a1 = S1 * math.exp((R - 0.5 * V1 * V1) * T + V1 * math.sqrt(T) * ran1)
-    #     a2 = S2 * math.exp((R - 0.5 * V2 * V2) * T + V2 * math.sqrt(T) * ran2)
-    #     arith_basket_mean = (a1 + a2) / 2
-    #
-    #     if option_type == 'call':
-    #         arith_basket_payoff_call = math.exp(-R * T) * max(arith_basket_mean - K, 0)
-    #         arith_basket_payoff.append(arith_basket_payoff_call)
-    #     elif option_type == 'put':
-    #         arith_basket_payoff_put = math.exp(-R * T) * max(K - arith_basket_mean, 0)
-    #         arith_basket_payoff.append(arith_basket_payoff_put)
-    #
-    #
-    # # Standard Monte Carlo
-    # p_mean = numpy.mean(arith_basket_payoff)
-    # p_std = numpy.std(arith_basket_payoff)
-    # p_confmc = (p_mean - 1.96 * p_std / math.sqrt(path_num), p_mean + 1.96 * p_std / math.sqrt(path_num))
-    #
-    # end = time.time()
-    # print "time", end - start
-    # print p_mean, p_std, p_confmc
-    #
-    # print "--------------------------------"
