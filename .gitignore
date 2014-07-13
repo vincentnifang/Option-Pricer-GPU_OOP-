@@ -2,3 +2,5 @@
 .idea/*.*
 
 .idea/scopes/scope_settings.xml
+
+*.pyc
