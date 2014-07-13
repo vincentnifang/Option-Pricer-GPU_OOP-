@@ -81,7 +81,7 @@ class BasketOptionWithControlVariate(BasketOption):
         # z = [x + y for x, y in zip(arith_basket_payoff, map(lambda x: theta * (geo - x), geo_basket_payoff))]
         z_mean = numpy.mean(z)
         z_std = numpy.std(z)
-        z_confmc = (z_mean - 1.96 * z_std / math.sqrt(path_num), z_mean + 1.96 * z_std / math.sqrt(path_num))
+        z_confmc = (z_mean - 1.96 * z_std / math.sqrt(self.path_num), z_mean + 1.96 * z_std / math.sqrt(self.path_num))
         return z_mean, z_std, z_confmc
 
 
@@ -95,11 +95,11 @@ class AsianOption(Option):
 
         if self.Quasi == True:
             # rand1 = numpy.array(quasi.quasi_normal_random(int(path_num * N), 2.0), dtype=numpy.float32)
-            self.rand1 = numpy.array(quasi.GPU_quasi_normal_random(int(path_num * self.N), 2.0), dtype=numpy.float32)
+            self.rand1 = numpy.array(quasi.GPU_quasi_normal_random(int(self.path_num * self.N), 2.0), dtype=numpy.float32)
         else:
-            self.rand1 = numpy.array(numpy.random.normal(0, 1, (path_num, N)), dtype=numpy.float32)
+            self.rand1 = numpy.array(numpy.random.normal(0, 1, (self.path_num, N)), dtype=numpy.float32)
 
-        self.arith_asian_payoff = numpy.empty((path_num, 1), dtype=numpy.float32)
+        self.arith_asian_payoff = numpy.empty((self.path_num, 1), dtype=numpy.float32)
         # create the buffers to hold the values of the input
         self.rand1_buf = cl.Buffer(self.cntxt, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.rand1)
         # create output buffer
@@ -110,7 +110,7 @@ class AsianOption(Option):
 
         # Kernel is now launched
 
-        launch = self.program.standard_arithmetic_asian_option(self.queue, (path_num, 1), None, self.rand1_buf,
+        launch = self.program.standard_arithmetic_asian_option(self.queue, (self.path_num, 1), None, self.rand1_buf,
                                                                self.arith_asian_payoff_buf, *(self.kernelargs))
         # wait till the process completes
         launch.wait()
@@ -121,7 +121,7 @@ class AsianOption(Option):
         # print the output
         p_mean = numpy.mean(self.arith_asian_payoff)
         p_std = numpy.std(self.arith_asian_payoff)
-        p_confmc = (p_mean - 1.96 * p_std / math.sqrt(path_num), p_mean + 1.96 * p_std / math.sqrt(path_num))
+        p_confmc = (p_mean - 1.96 * p_std / math.sqrt(self.path_num), p_mean + 1.96 * p_std / math.sqrt(self.path_num))
         return p_mean, p_std, p_confmc
 
 
@@ -132,11 +132,11 @@ class AsianOptionWithControlVariate(AsianOption):
 
     def popCorn(self):
         AsianOption.popCorn(self)
-        self.geo_payoff = numpy.empty((path_num, 1), dtype=numpy.float32)
+        self.geo_payoff = numpy.empty((self.path_num, 1), dtype=numpy.float32)
         self.geo_payoff_buf = cl.Buffer(self.cntxt, self.mf.WRITE_ONLY, self.geo_payoff.nbytes)
 
     def execute(self):
-        launch = self.program.geo_mean_arithmetic_asian_option(self.queue, (path_num, 1), None, self.rand1_buf,
+        launch = self.program.geo_mean_arithmetic_asian_option(self.queue, (self.path_num, 1), None, self.rand1_buf,
                                                                self.arith_asian_payoff_buf, self.geo_payoff_buf,
                                                                *(self.kernelargs))
         # wait till the process completes
@@ -155,10 +155,43 @@ class AsianOptionWithControlVariate(AsianOption):
         z = self.arith_asian_payoff + theta * (geo - self.geo_payoff)
         z_mean = numpy.mean(z)
         z_std = numpy.std(z)
-        z_confmc = (z_mean - 1.96 * z_std / math.sqrt(path_num), z_mean + 1.96 * z_std / math.sqrt(path_num))
+        z_confmc = (z_mean - 1.96 * z_std / math.sqrt(self.path_num), z_mean + 1.96 * z_std / math.sqrt(self.path_num))
         return z_mean, z_std, z_confmc
 
 
+class EuropeanOption(Option):
+    def __init__(self, path_num, Quasi, N, kernelargs):
+        Option.__init__(self, path_num, Quasi, kernelargs)
+        self.N = N
+
+    def popCorn(self):
+        #initialize client side (CPU) arrays
+        # rand1 = numpy.array(numpy.random.normal(0, 1, (path_num, N)), dtype=numpy.float32)
+        if self.Quasi == True:
+            # rand1 = numpy.array(quasi.quasi_normal_random(int(path_num * N), 2.0), dtype=numpy.float32)
+            self.rand1 = numpy.array(quasi.GPU_quasi_normal_random(int(self.path_num * self.N), 2.0), dtype=numpy.float32)
+        else:
+            self.rand1 = numpy.array(numpy.random.normal(0, 1, (self.path_num, self.N)), dtype=numpy.float32)
+
+        self.european_payoff = numpy.empty((self.path_num, 1), dtype=numpy.float32)
+        # create the buffers to hold the values of the input
+        self.rand1_buf = cl.Buffer(self.cntxt, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.rand1)
+        # create output buffer
+        self.european_payoff_buf = cl.Buffer(self.cntxt, self.mf.WRITE_ONLY, european_payoff.nbytes)
+
+
+    def execute(self):
+        launch = self.program.european_option(self.queue, (self.path_num, 1), None, self.rand1_buf,
+                                                  self.european_payoff_buf, *(self.kernelargs))
+        # wait till the process completes
+        launch.wait()
+        cl.enqueue_read_buffer(self.queue, self.european_payoff_buf, self.european_payoff).wait()
+
+    def ret(self):
+        p_mean = numpy.mean(self.european_payoff)
+        p_std = numpy.std(self.european_payoff)
+        p_confmc = (p_mean - 1.96 * p_std / math.sqrt(self.path_num), p_mean + 1.96 * p_std / math.sqrt(self.path_num))
+        return p_mean, p_std, p_confmc
 
 def format(f):
     return "%.4f" % f
