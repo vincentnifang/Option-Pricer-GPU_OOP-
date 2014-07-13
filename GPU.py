@@ -25,7 +25,7 @@ class CL:
         #create the program
         self.program = cl.Program(self.cntxt, fstr).build()
 
-    def popCorn(self, Quasi):
+    def popCorn(self):
         pass
 
     def execute(self):
@@ -34,19 +34,18 @@ class CL:
     def ret(self):
         pass
 
-
 class Option(CL):
-    def __init__(self, path_num, kernelargs):
+    def __init__(self, path_num, Quasi, kernelargs):
         CL.__init__(self, kernelargs)
         self.path_num = path_num
-
+        self.Quasi = Quasi
 
 
 class BasketOption(Option):
-    def popCorn(self, Quasi):
+    def popCorn(self):
         #initialize client side (CPU) arrays
 
-        if Quasi == True:
+        if self.Quasi == True:
             self.rand1 = numpy.array(quasi.GPU_quasi_normal_random(int(self.path_num), 2.0), dtype=numpy.float32)
             self.rand2 = numpy.array(quasi.GPU_quasi_normal_random(int(self.path_num), 2.0), dtype=numpy.float32)
         else:
@@ -78,12 +77,12 @@ class BasketOption(Option):
 
 
 class BasketOptionWithControlVariate(BasketOption):
-    def __init__(self, path_num, geo_K, kernelargs):
-        BasketOption.__init__(self, path_num, kernelargs)
+    def __init__(self, path_num, Quasi, geo_K, kernelargs):
+        BasketOption.__init__(self, path_num, Quasi, kernelargs)
         self.geo_K = geo_K
 
-    def popCorn(self, Quasi):
-        BasketOption.popCorn(self, Quasi)
+    def popCorn(self):
+        BasketOption.popCorn(self)
         self.geo_basket_payoff = numpy.empty(self.rand1.shape, dtype=numpy.float32)
         self.geo_basket_payoff_buf = cl.Buffer(self.cntxt, self.mf.WRITE_ONLY, self.geo_basket_payoff.nbytes)
 
@@ -114,16 +113,14 @@ class BasketOptionWithControlVariate(BasketOption):
 
 
 class AsianOption(Option):
-    def __init__(self, path_num, N, kernelargs):
-        Option.__init__(self, path_num, kernelargs)
+    def __init__(self, path_num, Quasi, N, kernelargs):
+        Option.__init__(self, path_num, Quasi, kernelargs)
         self.N = N
 
-    def popCorn(self, Quasi):
-
-
+    def popCorn(self):
         #initialize client side (CPU) arrays
 
-        if Quasi == True:
+        if self.Quasi == True:
             # rand1 = numpy.array(quasi.quasi_normal_random(int(path_num * N), 2.0), dtype=numpy.float32)
             self.rand1 = numpy.array(quasi.GPU_quasi_normal_random(int(path_num * self.N), 2.0), dtype=numpy.float32)
         else:
@@ -156,12 +153,12 @@ class AsianOption(Option):
 
 
 class AsianOptionWithControlVariate(AsianOption):
-    def __init__(self, path_num, N, geo_K, kernelargs):
-        AsianOption.__init__(self, path_num, N, kernelargs)
+    def __init__(self, path_num, Quasi, N, geo_K, kernelargs):
+        AsianOption.__init__(self, path_num, Quasi, N, kernelargs)
         self.geo_K = geo_K
 
-    def popCorn(self, Quasi):
-        AsianOption.popCorn(self, Quasi)
+    def popCorn(self):
+        AsianOption.popCorn(self)
         self.geo_payoff = numpy.empty((path_num, 1), dtype=numpy.float32)
         self.geo_payoff_buf = cl.Buffer(self.cntxt, self.mf.WRITE_ONLY, self.geo_payoff.nbytes)
 
@@ -189,11 +186,15 @@ class AsianOptionWithControlVariate(AsianOption):
         return z_mean, z_std, z_confmc
 
 
-def Test(obj, code, Quasi):
+def Test(obj, code):
     obj.loadProgram(code)
-    obj.popCorn(Quasi)
+    obj.popCorn()
     obj.execute()
     print obj.ret()
+
+
+def format(f):
+    return "%.4f" % f
 
 
 if __name__ == "__main__":
@@ -224,9 +225,9 @@ if __name__ == "__main__":
 
     kernelargs = (S1, S2, V1, V2, R, K, T, rou, option_type)
 
-    example = BasketOption(path_num, kernelargs)
+    example = BasketOption(path_num, Quasi, kernelargs)
     code = "cl/standard_arithmetic_basket_option.cl"
-    Test(example, code, Quasi)
+    Test(example, code)
 
     S = S0 = S1 = S2 = 100.0
     T = 3.0
@@ -253,9 +254,9 @@ if __name__ == "__main__":
 
     kernelargs = (S1, S2, V1, V2, R, K, geo_K, T, rou, option_type)
 
-    example = BasketOptionWithControlVariate(path_num, geo_K, kernelargs)
+    example = BasketOptionWithControlVariate(path_num, Quasi, geo_K, kernelargs)
     code = "cl/geo_mean_arithmetic_basket_option.cl"
-    Test(example, code, Quasi)
+    Test(example, code)
 
     S = S0 = S1 = S2 = 100.0
     T = 3.0
@@ -285,9 +286,9 @@ if __name__ == "__main__":
 
     kernelargs = (N, K, S0, sigma_sqrt, drift, exp_RT, option_type)
 
-    example = AsianOption(path_num, N, kernelargs)
+    example = AsianOption(path_num, Quasi, N, kernelargs)
     code = "cl/standard_arithmetic_asian_option.cl"
-    Test(example, code, Quasi)
+    Test(example, code)
 
     S = S0 = S1 = S2 = 100.0
     T = 3.0
@@ -310,9 +311,9 @@ if __name__ == "__main__":
 
     kernelargs = (N, K, geo_K, S0, sigma_sqrt, drift, exp_RT, option_type)
 
-    example = AsianOptionWithControlVariate(path_num, N, geo_K, kernelargs)
+    example = AsianOptionWithControlVariate(path_num, Quasi, N, geo_K, kernelargs)
     code = "cl/geo_mean_arithmetic_asian_option.cl"
-    Test(example, code, Quasi)
+    Test(example, code)
 
 
 
