@@ -1,5 +1,5 @@
 __author__ = 'vincent'
-import math
+import math,time
 from scipy import stats
 
 
@@ -38,3 +38,11 @@ def geometric_asian_option(K, T, R, V, S0, N, option_type):
     elif option_type == 2.0:
         return math.exp(-R * T) * (K * stats.norm.cdf(-d2) - S0 * math.exp(miu * T) * stats.norm.cdf(-d1))
     return None
+
+def print_use_time(func):
+    def __decorator(K, T, R, V, S0, N, option_type, path_num=10000):
+        s = time.time()
+        func(K, T, R, V, S0, N, option_type, path_num=10000)
+        e = time.time()
+        print e-s
+    return __decorator

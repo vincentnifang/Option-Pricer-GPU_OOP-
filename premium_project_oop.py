@@ -8,6 +8,9 @@ STANDARD = 'Standard'
 GEO_MEAN = 'Geometric mean Asian'
 GEO_MEAN_STRIKE = 'Geometric mean Asian with adjusted strike'
 
+import os
+base_path = os.path.dirname(os.path.abspath(__file__))
+
 
 def GPU_arithmetic_basket_option(S1, S2, V1, V2, R, T, K, geo_K, rou, option_type, path_num=10000,
                                  control_variate='Standard', Quasi=True):
@@ -25,11 +28,13 @@ def GPU_arithmetic_basket_option(S1, S2, V1, V2, R, T, K, geo_K, rou, option_typ
 
         kernelargs = (S1, S2, V1, V2, R, K, T, rou, option_type)
 
-        code = "cl/standard_arithmetic_basket_option.cl"
+        code = base_path + "/cl/standard_arithmetic_basket_option.cl"
         return BasketOption(path_num, Quasi, kernelargs).cal(code)
 
 
     elif control_variate == GEO_MEAN:
+
+        geo = util.geometric_basket_option(S1, S2, V1, V2, R, T, geo_K, rou, option_type)
 
         S1 = numpy.float32(S1)
         S2 = numpy.float32(S2)
@@ -44,8 +49,8 @@ def GPU_arithmetic_basket_option(S1, S2, V1, V2, R, T, K, geo_K, rou, option_typ
 
         kernelargs = (S1, S2, V1, V2, R, K, geo_K, T, rou, option_type)
 
-        code = "cl/geo_mean_arithmetic_basket_option.cl"
-        return BasketOptionWithControlVariate(path_num, Quasi, geo_K, kernelargs).cal(code)
+        code = base_path+"/cl/geo_mean_arithmetic_basket_option.cl"
+        return BasketOptionWithControlVariate(path_num, Quasi, geo_K, geo, kernelargs).cal(code)
 
     elif control_variate == GEO_MEAN_STRIKE:
         # K = K + mean(bgT)-mean(baT)
@@ -81,10 +86,13 @@ def GPU_arithmetic_asian_option(K, geo_K, T, R, V, S0, N, option_type, path_num=
 
         kernelargs = (N, K, S0, sigma_sqrt, drift, exp_RT, option_type)
 
-        code = "cl/standard_arithmetic_asian_option.cl"
+        code = base_path+"/cl/standard_arithmetic_asian_option.cl"
         return AsianOption(path_num, Quasi, N, kernelargs).cal(code)
 
     elif control_variate == GEO_MEAN:
+
+        geo = util.geometric_asian_option(geo_K, T, R, V, S0, N, option_type)
+
         dt = T / N
         sigma = V
         drift = math.exp((R - 0.5 * sigma * sigma) * dt)
@@ -102,9 +110,8 @@ def GPU_arithmetic_asian_option(K, geo_K, T, R, V, S0, N, option_type, path_num=
 
         kernelargs = (N, K, geo_K, S0, sigma_sqrt, drift, exp_RT, option_type)
 
-
-        code = "cl/geo_mean_arithmetic_asian_option.cl"
-        return AsianOptionWithControlVariate(path_num, Quasi, N, geo_K, kernelargs).cal(code)
+        code = base_path+"/cl/geo_mean_arithmetic_asian_option.cl"
+        return AsianOptionWithControlVariate(path_num, Quasi, N, geo_K, geo, kernelargs).cal(code)
 
     elif control_variate == GEO_MEAN_STRIKE:
         # K = K + mean(agT)-mean(aaT)
@@ -120,6 +127,7 @@ def GPU_arithmetic_asian_option(K, geo_K, T, R, V, S0, N, option_type, path_num=
         return GPU_arithmetic_asian_option(K, geo_K, T, R, V, S0, N, option_type, path_num, GEO_MEAN)
 
 
+# @util.print_use_time
 def standardMC_european_option(K, T, R, V, S0, N, option_type, path_num=10000):
     dt = T / N
     sigma = V
@@ -133,10 +141,10 @@ def standardMC_european_option(K, T, R, V, S0, N, option_type, path_num=10000):
             former = former * drift * math.exp(sigma_sqrt * numpy.random.normal(0, 1))
         european_option = former
 
-        if option_type == '1.0':
+        if option_type == 1.0:
             european_payoff_call = exp_RT * max(european_option - K, 0)
             european_payoff.append(european_payoff_call)
-        elif option_type == '2.0':
+        elif option_type == 2.0:
             european_payoff_put = exp_RT * max(K - european_option, 0)
             european_payoff.append(european_payoff_put)
 
@@ -165,13 +173,13 @@ def GPU_european_option(K, T, R, V, S0, N, option_type, path_num=10000, Quasi=Tr
 
     kernelargs = (N, K, S0, sigma_sqrt, drift, exp_RT, option_type)
 
-    code = "cl/european_option.cl"
+    code = base_path+"/cl/european_option.cl"
     return EuropeanOption(path_num, Quasi, N, kernelargs).cal(code)
 
 
-
 if __name__ == '__main__':
-    #print"S=100,K=100,t=0,T=0.5,v=20%,and r=1%."
+    pass
+    print"S=100,K=100,t=0,T=0.5,v=20%,and r=1%."
     import time
 
     s = time.time()
@@ -180,27 +188,27 @@ if __name__ == '__main__':
     T = 3.0
     R = 0.05
     V = V1 = V2 = 0.3
-    K = 100.0
+    geo_K = K = 100.0
     n = 50.0
     rou = 0.5
     m = 10000
 
-    print GPU_arithmetic_asian_option(K, K, T, R, V, S0, n, 1.0, path_num=100, control_variate=STANDARD, Quasi=True)
-
+    # print GPU_arithmetic_asian_option(K, K, T, R, V, S0, n, 1.0, path_num=100, control_variate=STANDARD, Quasi=False)
+    #
     import project
+    #
+    # # print project.arithmetic_asian_option(K, K, T, R, V, S0, n, 'call', path_num=100, control_variate=GEO_MEAN)
+    #
+    # e = time.time()
+    # print "use", e - s
+    #
+    # print GPU_arithmetic_basket_option(S1, S2, V1, V2, R, T, K, geo_K, rou, 1.0, path_num=10000,
+    #                              control_variate=GEO_MEAN_STRIKE, Quasi=False)
 
-    print project.arithmetic_asian_option(K, K, T, R, V, S0, n, 'call', path_num=100, control_variate=STANDARD)
-
-    e = time.time()
-    print "use", e - s
-
-    s = time.time()
-    print standardMC_european_option(K, T, R, V, S0, n, 'call', path_num=100000)
-    e = time.time()
-    print "use", e - s
+    print standardMC_european_option(K, T, R, V, S0, n, 1.0, path_num=10000)
 
     print project.bs(S0, K, T, V, R, 'call')
-    s = time.time()
-    print GPU_european_option(K, T, R, V, S0, n, 1.0, path_num=100000, Quasi=True)
-    e = time.time()
-    print "use", e - s
+    # s = time.time()
+    # print GPU_european_option(K, T, R, V, S0, n, 1.0, path_num=100000, Quasi=False)
+    # e = time.time()
+    # print "use", e - s

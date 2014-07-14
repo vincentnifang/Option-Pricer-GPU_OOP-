@@ -50,9 +50,10 @@ class BasketOption(Option):
 
 
 class BasketOptionWithControlVariate(BasketOption):
-    def __init__(self, path_num, Quasi, geo_K, kernelargs):
+    def __init__(self, path_num, Quasi, geo_K, geo, kernelargs):
         BasketOption.__init__(self, path_num, Quasi, kernelargs)
         self.geo_K = geo_K
+        self.geo = geo
 
     def popCorn(self):
         BasketOption.popCorn(self)
@@ -76,8 +77,9 @@ class BasketOptionWithControlVariate(BasketOption):
         theta = covxy / numpy.var(self.geo_basket_payoff)
 
         # Control Variate Version
-        geo = util.geometric_basket_option(S1, S2, V1, V2, R, T, self.geo_K, rou, option_type)
-        z = self.arith_basket_payoff + theta * (geo - self.geo_basket_payoff)
+        # (S1, S2, V1, V2, R, K, geo_K, T, rou, option_type) = self.kernelargs
+        # geo = util.geometric_basket_option(S1, S2, V1, V2, R, T, self.geo_K, rou, option_type)
+        z = self.arith_basket_payoff + theta * (self.geo - self.geo_basket_payoff)
         # z = [x + y for x, y in zip(arith_basket_payoff, map(lambda x: theta * (geo - x), geo_basket_payoff))]
         z_mean = numpy.mean(z)
         z_std = numpy.std(z)
@@ -97,7 +99,7 @@ class AsianOption(Option):
             # rand1 = numpy.array(quasi.quasi_normal_random(int(path_num * N), 2.0), dtype=numpy.float32)
             self.rand1 = numpy.array(quasi.GPU_quasi_normal_random(int(self.path_num * self.N), 2.0), dtype=numpy.float32)
         else:
-            self.rand1 = numpy.array(numpy.random.normal(0, 1, (self.path_num, N)), dtype=numpy.float32)
+            self.rand1 = numpy.array(numpy.random.normal(0, 1, (self.path_num, self.N)), dtype=numpy.float32)
 
         self.arith_asian_payoff = numpy.empty((self.path_num, 1), dtype=numpy.float32)
         # create the buffers to hold the values of the input
@@ -126,9 +128,10 @@ class AsianOption(Option):
 
 
 class AsianOptionWithControlVariate(AsianOption):
-    def __init__(self, path_num, Quasi, N, geo_K, kernelargs):
+    def __init__(self, path_num, Quasi, N, geo_K, geo, kernelargs):
         AsianOption.__init__(self, path_num, Quasi, N, kernelargs)
         self.geo_K = geo_K
+        self.geo = geo
 
     def popCorn(self):
         AsianOption.popCorn(self)
@@ -150,9 +153,10 @@ class AsianOptionWithControlVariate(AsianOption):
         theta = covxy / numpy.var(self.geo_payoff)
 
         # Control Variate Version
-        geo = util.geometric_asian_option(self.geo_K, T, R, V, S0, self.N, option_type)
+        # (N, K, geo_K, S0, sigma_sqrt, drift, exp_RT, option_type) = self.kernelargs
+        # geo = util.geometric_asian_option(self.geo_K, T, R, V, S0, self.N, option_type)
         # z = [x + y for x, y in zip(arith_payoff, map(lambda x: theta * (geo - x), geo_payoff))]
-        z = self.arith_asian_payoff + theta * (geo - self.geo_payoff)
+        z = self.arith_asian_payoff + theta * (self.geo - self.geo_payoff)
         z_mean = numpy.mean(z)
         z_std = numpy.std(z)
         z_confmc = (z_mean - 1.96 * z_std / math.sqrt(self.path_num), z_mean + 1.96 * z_std / math.sqrt(self.path_num))
@@ -177,7 +181,7 @@ class EuropeanOption(Option):
         # create the buffers to hold the values of the input
         self.rand1_buf = cl.Buffer(self.cntxt, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.rand1)
         # create output buffer
-        self.european_payoff_buf = cl.Buffer(self.cntxt, self.mf.WRITE_ONLY, european_payoff.nbytes)
+        self.european_payoff_buf = cl.Buffer(self.cntxt, self.mf.WRITE_ONLY, self.european_payoff.nbytes)
 
 
     def execute(self):
@@ -198,123 +202,124 @@ def format(f):
 
 
 if __name__ == "__main__":
-    path_num = 10000
-    Quasi = False
-
-    S = S0 = S1 = S2 = 100.0
-    T = 3.0
-    R = 0.05
-    V = V1 = V2 = 0.3
-    geo_K = K = 100.0
-    n = 50.0
-    rou = 0.5
-    m = 10000
-    N = 50
-
-    option_type = 1.0
-
-    S1 = numpy.float32(S1)
-    S2 = numpy.float32(S2)
-    V1 = numpy.float32(V1)
-    V2 = numpy.float32(V2)
-    R = numpy.float32(R)
-    K = numpy.float32(K)
-    T = numpy.float32(T)
-    rou = numpy.float32(rou)
-    option_type = numpy.float32(option_type)
-
-    kernelargs = (S1, S2, V1, V2, R, K, T, rou, option_type)
-
-    example = BasketOption(path_num, Quasi, kernelargs)
-    code = "cl/standard_arithmetic_basket_option.cl"
-    print example.cal(code)
-
-    S = S0 = S1 = S2 = 100.0
-    T = 3.0
-    R = 0.05
-    V = V1 = V2 = 0.3
-    geo_K = K = 100.0
-    n = 50.0
-    rou = 0.5
-    m = 10000
-    N = 50
-
-    option_type = 1.0
-
-    S1 = numpy.float32(S1)
-    S2 = numpy.float32(S2)
-    V1 = numpy.float32(V1)
-    V2 = numpy.float32(V2)
-    R = numpy.float32(R)
-    K = numpy.float32(K)
-    T = numpy.float32(T)
-    rou = numpy.float32(rou)
-    option_type = numpy.float32(option_type)
-    geo_K = numpy.float32(geo_K)
-
-    kernelargs = (S1, S2, V1, V2, R, K, geo_K, T, rou, option_type)
-
-    example = BasketOptionWithControlVariate(path_num, Quasi, geo_K, kernelargs)
-    code = "cl/geo_mean_arithmetic_basket_option.cl"
-    print example.cal(code)
-
-    S = S0 = S1 = S2 = 100.0
-    T = 3.0
-    R = 0.05
-    V = V1 = V2 = 0.3
-    geo_K = K = 100.0
-    n = 50.0
-    rou = 0.5
-    m = 10000
-    N = 50
-
-    option_type = 1.0
-
-    dt = T / N
-    sigma = V
-    drift = math.exp((R - 0.5 * sigma * sigma) * dt)
-    sigma_sqrt = sigma * math.sqrt(dt)
-    exp_RT = math.exp(-R * T)
-
-    N = numpy.float32(N)
-    K = numpy.float32(K)
-    S0 = numpy.float32(S0)
-    sigma_sqrt = numpy.float32(sigma_sqrt)
-    drift = numpy.float32(drift)
-    exp_RT = numpy.float32(exp_RT)
-    option_type = numpy.float32(option_type)
-
-    kernelargs = (N, K, S0, sigma_sqrt, drift, exp_RT, option_type)
-
-    example = AsianOption(path_num, Quasi, N, kernelargs)
-    code = "cl/standard_arithmetic_asian_option.cl"
-
-    print example.cal(code)
-
-    S = S0 = S1 = S2 = 100.0
-    T = 3.0
-    R = 0.05
-    V = V1 = V2 = 0.3
-    geo_K = K = 100.0
-    n = 50.0
-    rou = 0.5
-    m = 10000
-    N = 50
-
-    N = numpy.float32(N)
-    K = numpy.float32(K)
-    geo_K = numpy.float32(geo_K)
-    S0 = numpy.float32(S0)
-    sigma_sqrt = numpy.float32(sigma_sqrt)
-    drift = numpy.float32(drift)
-    exp_RT = numpy.float32(exp_RT)
-    option_type = numpy.float32(option_type)
-
-    kernelargs = (N, K, geo_K, S0, sigma_sqrt, drift, exp_RT, option_type)
-
-    example = AsianOptionWithControlVariate(path_num, Quasi, N, geo_K, kernelargs)
-    code = "cl/geo_mean_arithmetic_asian_option.cl"
-    print example.cal(code)
+    pass
+    # path_num = 10000
+    # Quasi = False
+    #
+    # S = S0 = S1 = S2 = 100.0
+    # T = 3.0
+    # R = 0.05
+    # V = V1 = V2 = 0.3
+    # geo_K = K = 100.0
+    # n = 50.0
+    # rou = 0.5
+    # m = 10000
+    # N = 50
+    #
+    # option_type = 1.0
+    #
+    # S1 = numpy.float32(S1)
+    # S2 = numpy.float32(S2)
+    # V1 = numpy.float32(V1)
+    # V2 = numpy.float32(V2)
+    # R = numpy.float32(R)
+    # K = numpy.float32(K)
+    # T = numpy.float32(T)
+    # rou = numpy.float32(rou)
+    # option_type = numpy.float32(option_type)
+    #
+    # kernelargs = (S1, S2, V1, V2, R, K, T, rou, option_type)
+    #
+    # example = BasketOption(path_num, Quasi, kernelargs)
+    # code = "cl/standard_arithmetic_basket_option.cl"
+    # print example.cal(code)
+    #
+    # S = S0 = S1 = S2 = 100.0
+    # T = 3.0
+    # R = 0.05
+    # V = V1 = V2 = 0.3
+    # geo_K = K = 100.0
+    # n = 50.0
+    # rou = 0.5
+    # m = 10000
+    # N = 50
+    #
+    # option_type = 1.0
+    #
+    # S1 = numpy.float32(S1)
+    # S2 = numpy.float32(S2)
+    # V1 = numpy.float32(V1)
+    # V2 = numpy.float32(V2)
+    # R = numpy.float32(R)
+    # K = numpy.float32(K)
+    # T = numpy.float32(T)
+    # rou = numpy.float32(rou)
+    # option_type = numpy.float32(option_type)
+    # geo_K = numpy.float32(geo_K)
+    #
+    # kernelargs = (S1, S2, V1, V2, R, K, geo_K, T, rou, option_type)
+    #
+    # example = BasketOptionWithControlVariate(path_num, Quasi, geo_K, kernelargs)
+    # code = "cl/geo_mean_arithmetic_basket_option.cl"
+    # print example.cal(code)
+    #
+    # S = S0 = S1 = S2 = 100.0
+    # T = 3.0
+    # R = 0.05
+    # V = V1 = V2 = 0.3
+    # geo_K = K = 100.0
+    # n = 50.0
+    # rou = 0.5
+    # m = 10000
+    # N = 50
+    #
+    # option_type = 1.0
+    #
+    # dt = T / N
+    # sigma = V
+    # drift = math.exp((R - 0.5 * sigma * sigma) * dt)
+    # sigma_sqrt = sigma * math.sqrt(dt)
+    # exp_RT = math.exp(-R * T)
+    #
+    # N = numpy.float32(N)
+    # K = numpy.float32(K)
+    # S0 = numpy.float32(S0)
+    # sigma_sqrt = numpy.float32(sigma_sqrt)
+    # drift = numpy.float32(drift)
+    # exp_RT = numpy.float32(exp_RT)
+    # option_type = numpy.float32(option_type)
+    #
+    # kernelargs = (N, K, S0, sigma_sqrt, drift, exp_RT, option_type)
+    #
+    # example = AsianOption(path_num, Quasi, N, kernelargs)
+    # code = "cl/standard_arithmetic_asian_option.cl"
+    #
+    # print example.cal(code)
+    #
+    # S = S0 = S1 = S2 = 100.0
+    # T = 3.0
+    # R = 0.05
+    # V = V1 = V2 = 0.3
+    # geo_K = K = 100.0
+    # n = 50.0
+    # rou = 0.5
+    # m = 10000
+    # N = 50
+    #
+    # N = numpy.float32(N)
+    # K = numpy.float32(K)
+    # geo_K = numpy.float32(geo_K)
+    # S0 = numpy.float32(S0)
+    # sigma_sqrt = numpy.float32(sigma_sqrt)
+    # drift = numpy.float32(drift)
+    # exp_RT = numpy.float32(exp_RT)
+    # option_type = numpy.float32(option_type)
+    #
+    # kernelargs = (N, K, geo_K, S0, sigma_sqrt, drift, exp_RT, option_type)
+    #
+    # example = AsianOptionWithControlVariate(path_num, Quasi, N, geo_K, kernelargs)
+    # code = "cl/geo_mean_arithmetic_asian_option.cl"
+    # print example.cal(code)
 
 
 
